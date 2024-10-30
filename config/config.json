@@ -1,0 +1,8 @@
+{
+    "password": "gurdi161pr",
+    "ntpServer1": "pool.ntp.org",
+    "ntpServer2": "time.nist.gov",
+    "gmtOffset_sec": -10800,
+    "daylightOffset_sec": 0
+  }
+  

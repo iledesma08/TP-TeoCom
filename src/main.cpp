@@ -2,13 +2,31 @@
 #include <Adafruit_BMP280.h>
 #include <LiquidCrystal.h>
 #include <WiFi.h>
+#include <HTTPClient.h>
 #include <time.h>
+#include <esp_sleep.h>
 
+// Definiciones de red
 #define BAUD_RATE 115200
 
 // Definiciones de tiempo
 #define SAMPLE_TIME_MS 600000 // 10 minutos en milisegundos
 #define DISPLAY_TIME_MS 10000 // Cambio cada 10 segundos
+#define SEC_TO_US 1000000       // Segundos a microsegundos
+
+// Definiciones para reloj
+#define UTC_OFFSET -10800 // UTC-3 horas en segundos
+#define DST_OFFSET 0      // No hay horario de verano en Argentina
+
+// Configuración de WiFi y NTP
+const char* ssid = "Fibertel Wifi249 2.4GHz";
+const char* password = "gurdi161pr";
+const char* ntpServer1 = "pool.ntp.org";
+const char* ntpServer2 = "time.nist.gov";
+const long gmtOffset_sec = UTC_OFFSET;
+const int daylightOffset_sec = DST_OFFSET;
+// URL del script de Apps Script para enviar datos a Google Sheets
+const char* scriptURL = "https://script.google.com/macros/s/AKfycbx4X2QpN6QjZ2zSx5OdtCEPX5S8v6WXFEhs6Pvx7NPWWzzBnqSnzMXLhmsGCfgRHCLLpg/exec";
 
 // Pines del LCD
 const int rs = 15, en = 2, d4 = 4, d5 = 16, d6 = 17, d7 = 5;
@@ -25,18 +43,6 @@ DHT dht(DHTPIN, DHTTYPE);
 #define I2C_ADDRESS_SDO_GND 0x76
 Adafruit_BMP280 bmp;
 
-// Definiciones para reloj
-#define UTC_OFFSET -10800 // UTC-3 horas en segundos
-#define DST_OFFSET 0      // No hay horario de verano en Argentina
-
-// Configuración de WiFi y NTP
-const char* ssid = "SSID";
-const char* password = "PASSWORD";
-const char* ntpServer1 = "pool.ntp.org";
-const char* ntpServer2 = "time.nist.gov";
-const long gmtOffset_sec = UTC_OFFSET;
-const int daylightOffset_sec = DST_OFFSET;
-
 // Variables de tiempo para control de intervalos
 unsigned long previousMillisSense = 0;
 unsigned long intervalSense = SAMPLE_TIME_MS;
@@ -44,6 +50,9 @@ unsigned long previousMillisDisplay = 0;
 unsigned long intervalDisplay = DISPLAY_TIME_MS; // Cambio cada 10 segundos
 unsigned int time_error = 0;
 bool showDateTime = false;
+
+// Variables globales de los sensores
+float temperatureDHT, humidityDHT, temperatureBMP, pressureBMP, temperatureProm;
 
 // Función para obtener la hora NTP con límite de intentos
 void obtenerHoraNTP() {
@@ -86,31 +95,72 @@ void mostrarFechaHora() {
   }
 }
 
-// Función para leer y mostrar datos de sensores en el serial y en el LCD
-void mostrarDatosSensores() {
-  // Leer temperatura y humedad del DHT11
-  float temperatureDHT = dht.readTemperature();
-  float humidityDHT = dht.readHumidity();
+// Función para enviar datos a Google Sheets
+void update_data_to_google_sheets() {
+  HTTPClient http;
 
-  // Leer presión y temperatura del BMP280
-  float temperatureBMP = bmp.readTemperature();
-  float pressureBMP = bmp.readPressure() / 100.0;  // Convertir de Pa a hPa
+  // Especifica URL del servidor y el script
+  http.begin(scriptURL);
+  http.addHeader("Content-Type", "application/json");
+
+  // Crea el payload en formato JSON
+  String postData = "{\"temperatureDHT\": " + String(temperatureDHT) + ", \"humidityDHT\": " + String(humidityDHT) +
+                  ", \"temperatureBMP\": " + String(temperatureBMP) + ", \"pressureBMP\": " + String(pressureBMP) + 
+                  ", \"temperatureProm\": " + String(temperatureProm) + "}";
   
-  // Imprimir en Serial
+  // Realiza la solicitud HTTP POST
+  int httpResponseCode = http.POST(postData);
+
+  // Verifica el código de respuesta
+  if (httpResponseCode > 0) {
+    String response = http.getString();
+    Serial.println("Respuesta del servidor: " + response + "- Código de respuesta: " + String(httpResponseCode));
+  } else {
+    Serial.println("Error en la solicitud HTTP: " + http.errorToString(httpResponseCode));
+  }
+  http.end();
+}
+
+// Función para mostrar datos de sensores en el serial
+void mostrarDatosSensores_Serial() {
   Serial.print("Temperatura: ");
-  Serial.print(temperatureDHT);
+  Serial.print(temperatureBMP);
   Serial.print("°C  Humedad: ");
   Serial.print(humidityDHT);
   Serial.print("%  ");
   Serial.print("Presion: ");
   Serial.print(pressureBMP);
   Serial.println(" hPa");
+}
 
-  // Mostrar en el LCD
+// Función para mostrar datos de sensores en el LCD
+void mostrarDatosSensores_LCD() {
   lcd.setCursor(0, 0);
-  lcd.printf("T:%dC H:%d%%", (int)temperatureDHT, (int)humidityDHT);
+  lcd.printf("T:%dC H:%d%%", (int)temperatureBMP, (int)humidityDHT);
   lcd.setCursor(0, 1);
   lcd.printf("P:%.2fhPa", pressureBMP);
+}
+
+// Función para leer y mostrar datos de sensores en el serial y en el LCD
+void actualizarDatosSensores() {
+  // Leer temperatura y humedad del DHT11
+  temperatureDHT = dht.readTemperature();
+  humidityDHT = dht.readHumidity();
+
+  // Leer presión y temperatura del BMP280
+  temperatureBMP = bmp.readTemperature();
+  pressureBMP = bmp.readPressure() / 100.0;  // Convertir de Pa a hPa
+
+  temperatureProm = (temperatureDHT + temperatureBMP) / 2;
+  
+  // Imprimir en Serial
+  mostrarDatosSensores_Serial();
+
+  // Mostrar en el LCD
+  mostrarDatosSensores_LCD();
+
+  // Enviar datos a Google Sheets
+  update_data_to_google_sheets();
 }
 
 void setup() {
@@ -133,9 +183,15 @@ void setup() {
 
   // Conexión WiFi
   WiFi.begin(ssid, password);
+  int intentos = 0;
   while (WiFi.status() != WL_CONNECTED) {
     delay(1000);
     Serial.println("Conectando a WiFi...");
+    intentos++;
+    if (intentos > 10) {
+      Serial.println("Error al conectar a WiFi.");
+      while (1); // Detener aquí si no se puede conectar a WiFi
+    }
   }
   Serial.println("Conectado a WiFi!");
 
@@ -150,20 +206,21 @@ void loop() {
   // Toma de muestras cada 10 minutos
   if (currentMillis - previousMillisSense >= intervalSense) {
     previousMillisSense = currentMillis;
-    mostrarDatosSensores();  // Llama a la función para leer y mostrar los datos
+    actualizarDatosSensores();  // Llama a la función para leer y mostrar los datos
   }
   
-  // Rotar entre mostrar datos de sensores y la fecha/hora cada 10 segundos
-  if (currentMillis - previousMillisDisplay >= intervalDisplay) {
-    previousMillisDisplay = currentMillis;
-    showDateTime = !showDateTime;
+  // Configura el tiempo de espera para el modo de bajo consumo (light sleep, sigue conectado a WiFi)
+  esp_sleep_enable_timer_wakeup(intervalDisplay * SEC_TO_US);
+  // Se despierta del modo de bajo consumo
+
+  // Toggle entre mostrar la fecha y hora o los datos de los sensores en el LCD
+  showDateTime = !showDateTime;
     
-    lcd.clear();
-    if (showDateTime) {
-      mostrarFechaHora();
-    } else {
-      mostrarDatosSensores();
-    }
+  lcd.clear();
+  if (showDateTime) {
+    mostrarFechaHora();
+  } else {
+    mostrarDatosSensores_LCD();
   }
 
   delay(10);  // Para evitar que el Watchdog se active

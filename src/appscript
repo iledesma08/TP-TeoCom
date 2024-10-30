@@ -1,0 +1,44 @@
+/**
+ * @brief Script para recibir datos de un dispositivo IoT y almacenarlos en una hoja de cálculo de Google Sheets
+ * 
+ * @note Este script se ejecuta en Google Apps Script, el cual es una plataforma de desarrollo de aplicaciones en la nube
+ */
+
+function doPost(e) {
+    try {
+      Logger.log("Solicitud recibida: " + JSON.stringify(e));
+  
+      // Parsear los datos JSON recibidos
+      var data = JSON.parse(e.postData.contents);
+  
+      // Obtener la hoja de cálculo activa
+      var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+      var sheet = spreadsheet.getSheets()[0]; // Selecciona la primera hoja
+  
+      // Agregar una fila con los datos recibidos
+      sheet.appendRow([new Date(), data.temperatureDHT, data.temperatureBMP, data.temperatureProm, data.humidityDHT, data.pressureBMP]);
+  
+      Logger.log("Datos agregados correctamente.");
+      // Responder con éxito
+      return ContentService.createTextOutput("Datos recibidos correctamente");
+    } catch (error) {
+      // En caso de error, registrar el error en el registro y responder con el mensaje de error
+      Logger.log("Error en doPost: " + error.message);
+      return ContentService.createTextOutput("Error en JSON: " + error.message);
+    }
+  }
+  
+  function doGet(e) {
+    try {
+      // Obtener la hoja de cálculo activa
+      var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+      var sheet = spreadsheet.getSheets()[0]; // Selecciona la primera hoja
+  
+      Logger.log("Datos de prueba agregados correctamente.");
+      // Responder con éxito
+      return ContentService.createTextOutput("Datos de prueba agregados correctamente");
+    } catch (error) {
+      Logger.log("Error en doGet: " + error.message);
+      return ContentService.createTextOutput("Error en doGet: " + error.message);
+    }
+  }
