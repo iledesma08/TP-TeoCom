@@ -10,9 +10,10 @@
 #define BAUD_RATE 115200
 
 // Definiciones de tiempo
-#define SAMPLE_TIME_MS 600000 // 10 minutos en milisegundos
-#define DISPLAY_TIME_MS 10000 // Cambio cada 10 segundos
-#define SEC_TO_US 1000000       // Segundos a microsegundos
+#define SAMPLE_TIME_MIN 5     // 5 minutos
+#define DISPLAY_TIME_SEC 10   // Cambio cada 10 segundos
+#define MIN_TO_MS 60000       // Minutos a segundos
+#define SEC_TO_US 1000000     // Segundos a microsegundos
 
 // Definiciones para reloj
 #define UTC_OFFSET -10800 // UTC-3 horas en segundos
@@ -27,6 +28,7 @@ const long gmtOffset_sec = UTC_OFFSET;
 const int daylightOffset_sec = DST_OFFSET;
 // URL del script de Apps Script para enviar datos a Google Sheets
 const char* scriptURL = "https://script.google.com/macros/s/AKfycbx4X2QpN6QjZ2zSx5OdtCEPX5S8v6WXFEhs6Pvx7NPWWzzBnqSnzMXLhmsGCfgRHCLLpg/exec";
+int samples = 992; // Número de muestras a publicar en la datasheet cada vez que se prende la ESP32
 
 // Pines del LCD
 const int rs = 15, en = 2, d4 = 4, d5 = 16, d6 = 17, d7 = 5;
@@ -45,9 +47,9 @@ Adafruit_BMP280 bmp;
 
 // Variables de tiempo para control de intervalos
 unsigned long previousMillisSense = 0;
-unsigned long intervalSense = SAMPLE_TIME_MS;
+unsigned long intervalSense = SAMPLE_TIME_MIN * MIN_TO_MS;
 unsigned long previousMillisDisplay = 0;
-unsigned long intervalDisplay = DISPLAY_TIME_MS; // Cambio cada 10 segundos
+unsigned long intervalDisplay = DISPLAY_TIME_SEC;
 unsigned int time_error = 0;
 bool showDateTime = false;
 
@@ -160,7 +162,10 @@ void actualizarDatosSensores() {
   mostrarDatosSensores_LCD();
 
   // Enviar datos a Google Sheets
-  update_data_to_google_sheets();
+  if (samples > 0) {
+    update_data_to_google_sheets();
+    samples--;
+  }
 }
 
 void setup() {
