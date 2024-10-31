@@ -188,15 +188,9 @@ void setup() {
 
   // Conexión WiFi
   WiFi.begin(ssid, password);
-  int intentos = 0;
   while (WiFi.status() != WL_CONNECTED) {
     delay(1000);
     Serial.println("Conectando a WiFi...");
-    intentos++;
-    if (intentos > 10) {
-      Serial.println("Error al conectar a WiFi.");
-      while (1); // Detener aquí si no se puede conectar a WiFi
-    }
   }
   Serial.println("Conectado a WiFi!");
 
