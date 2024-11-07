@@ -199,7 +199,7 @@ void imprimirCentrado(String texto, int linea) {
 void obtenerHoraNTP()
 {
     struct tm timeinfo;
-    int retry = INTENTOS_HORA;
+    int retry = 0;
     Serial.println("Esperando la hora...");
     while (!getLocalTime(&timeinfo) && retry < INTENTOS_HORA)
     {
