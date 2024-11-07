@@ -46,7 +46,7 @@ const int daylightOffset_sec = DST_OFFSET;
 // Configuracion Gateway
 unsigned long channelID = 2684607;                //ID 
 const char* WriteAPIKey = "WWLNAKEODAP70AF3";     //Write API Key
-bool connectToGateway = false; // Con cambiar esto a true se conecta a la
+bool connectToGateway = true; // Con cambiar esto a true se conecta a la
                                // gateway
 
 // URL del script de Apps Script para enviar datos a Google Sheets
@@ -66,7 +66,7 @@ LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 #define LCD_ROWS 2
 
 // Pines y configuración del DHT11
-#define DHTPIN  18 // Ajusta el pin al que está conectado el DHT11
+#define DHTPIN  32 // Ajusta el pin al que está conectado el DHT11
 #define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE);
 
@@ -363,10 +363,10 @@ void actualizarDatosSensores()
     if (connectToGateway && wifiConnected)
     {
         // Enviar datos a ThingSpeak
-        ThingSpeak.setField(1, temperatureBMP);
-        ThingSpeak.setField(2, humidityDHT);
-        ThingSpeak.setField(3, pressureBMP);
-        ThingSpeak.setField(4, altitudeBMP);
+        ThingSpeak.setField(5, temperatureBMP);
+        ThingSpeak.setField(6, humidityDHT);
+        ThingSpeak.setField(7, pressureBMP);
+        ThingSpeak.setField(8, altitudeBMP);
         
         //ThingSpeak.setField(5, temperatureProm);
         int x = ThingSpeak.writeFields(channelID, WriteAPIKey);
