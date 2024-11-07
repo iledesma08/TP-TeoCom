@@ -2,20 +2,23 @@
 #include <DHT.h>
 #include <HTTPClient.h>
 #include <LiquidCrystal.h>
+#include <ThingSpeak.h>
 #include <WiFi.h>
 #include <esp_sleep.h>
 #include <time.h>
+
+#define HPA_SEA_LEVEL 1013.25 // Presión atmosférica al nivel del mar en hPa
 
 // Definiciones de red
 #define BAUD_RATE 115200
 
 // Definiciones para mostrar datos en el LCD
-#define LCD_LINE_0 0
-#define LCD_LINE_1 1
-#define DATE_INIT_COL 3 // 16-10(largo de la fecha)=6/2 = 3
-#define TIME_INIT_COL 6 // 16-5(largo de la hora)=11/2 = 5.5->6
+#define LCD_LINE_0        0
+#define LCD_LINE_1        1
+#define DATE_INIT_COL     3 // 16-10(largo de la fecha)=6/2 = 3
+#define TIME_INIT_COL     6 // 16-5(largo de la hora)=11/2 = 5.5->6
 #define TEMP_HUM_INIT_COL 3 // 16-11(largo de la cadena)=5/2 = 2.5->3
-#define PRES_INIT_COL 4 // 16-8(largo de la cadena)=8/2 = 4
+#define PRES_INIT_COL     4 // 16-8(largo de la cadena)=8/2 = 4
 
 // Definiciones de tiempo
 #define SAMPLE_TIME_MIN  5       // 5 minutos
@@ -39,6 +42,13 @@ const char* ntpServer2 = "time.nist.gov";
 #define DELAY_AFTER_TRY 1000
 const long gmtOffset_sec = UTC_OFFSET;
 const int daylightOffset_sec = DST_OFFSET;
+
+// Configuracion Gateway
+unsigned long channelID = 2684607;                //ID 
+const char* WriteAPIKey = "WWLNAKEODAP70AF3";     //Write API Key
+bool connectToGateway = false; // Con cambiar esto a true se conecta a la
+                               // gateway
+
 // URL del script de Apps Script para enviar datos a Google Sheets
 const char* scriptURL = "https://script.google.com/macros/s/"
                         "AKfycbx4X2QpN6QjZ2zSx5OdtCEPX5S8v6WXFEhs6Pvx7NPWWzzBnq"
@@ -46,6 +56,8 @@ const char* scriptURL = "https://script.google.com/macros/s/"
 int samples = 24 * 60 / SAMPLE_TIME_MIN; // Número de muestras a publicar en la datasheet
                                          // cada vez que se prende la ESP32 (1 dia de
                                          // muestras)
+bool sendToGoogleSheets = false;         // Con cambiar esto a true ya se empiezan a
+                                         // mandar datos a la datasheet
 
 // Pines del LCD
 const int rs = 15, en = 2, d4 = 4, d5 = 16, d6 = 17, d7 = 5;
@@ -69,14 +81,12 @@ unsigned long previousMillisDisplay = 0;
 unsigned long intervalDisplay = DISPLAY_TIME_SEC * SEC_TO_MS;
 unsigned int time_error = false;
 bool showDateTime = false;
-bool sendToGoogleSheets = false; // Con cambiar esto a true ya se empiezan a
-                                 // mandar datos a la datasheet
 bool wifiConnected = true;
 bool dhtConnected = true;
 bool bmpConnected = true;
 
 // Variables globales de los sensores
-float temperatureDHT, humidityDHT, temperatureBMP, pressureBMP, temperatureProm;
+float temperatureDHT, humidityDHT, temperatureBMP, pressureBMP, temperatureProm, altitudeBMP;
 
 // Prototipos de funciones
 void imprimirCentrado(String texto, int linea);
@@ -145,6 +155,10 @@ void setup()
         // Configuración de tiempo usando NTP
         configTime(gmtOffset_sec, daylightOffset_sec, ntpServer1, ntpServer2);
         obtenerHoraNTP();
+        if (connectToGateway) {
+            WiFiClient client;
+            ThingSpeak.begin(client);
+        }
     }
     actualizarDatosSensores();
 }
@@ -166,7 +180,7 @@ void loop()
     if (currentMillis - previousMillisDisplay >= intervalDisplay)
     {
         previousMillisDisplay = currentMillis;
-        if (wifiConnected)
+        if (wifiConnected && !time_error)
         {
             // Toggle entre mostrar la fecha y hora o los datos de los sensores en el
             // LCD, si es que se conectó a WiFi
@@ -187,12 +201,13 @@ void loop()
 }
 
 // Función para centrar texto en el LCD en una línea específica
-void imprimirCentrado(String texto, int linea) {
-  int posicionInicio = ceil((16 - texto.length())/2.0); // Calcula la posición de inicio
+void imprimirCentrado(String texto, int linea)
+{
+    int posicionInicio = ceil((16 - texto.length()) / 2.0); // Calcula la posición de inicio
 
-  lcd.clear(); // Limpia la pantalla
-  lcd.setCursor(posicionInicio, linea); // Coloca el cursor en la posición calculada
-  lcd.print(texto); // Imprime el texto
+    lcd.clear();                          // Limpia la pantalla
+    lcd.setCursor(posicionInicio, linea); // Coloca el cursor en la posición calculada
+    lcd.print(texto);                     // Imprime el texto
 }
 
 // Función para obtener la hora NTP con límite de intentos
@@ -320,11 +335,13 @@ void actualizarDatosSensores()
         // Leer presión y temperatura del BMP280
         temperatureBMP = bmp.readTemperature();
         pressureBMP = bmp.readPressure() / 100.0; // Convertir de Pa a hPa
+        altitudeBMP = bmp.readAltitude(HPA_SEA_LEVEL);  // Calcular altitud con respecto al nivel del mar
     }
     else
     {
         temperatureBMP = -1;
         pressureBMP = -1;
+        altitudeBMP = -1;
     }
 
     if (dhtConnected && bmpConnected)
@@ -343,7 +360,27 @@ void actualizarDatosSensores()
     // Mostrar en el LCD
     mostrarDatosSensores_LCD();
 
-    if (sendToGoogleSheets)
+    if (connectToGateway && wifiConnected)
+    {
+        // Enviar datos a ThingSpeak
+        ThingSpeak.setField(1, temperatureBMP);
+        ThingSpeak.setField(2, humidityDHT);
+        ThingSpeak.setField(3, pressureBMP);
+        ThingSpeak.setField(4, altitudeBMP);
+        
+        //ThingSpeak.setField(5, temperatureProm);
+        int x = ThingSpeak.writeFields(channelID, WriteAPIKey);
+        if (x == 200)
+        {
+            Serial.println("Datos enviados a ThingSpeak correctamente.");
+        }
+        else
+        {
+            Serial.println("Error al enviar datos a ThingSpeak. Código de error: " + String(x));
+        }
+    }
+
+    if (sendToGoogleSheets && wifiConnected)
     {
         // Enviar datos a Google Sheets
         if (samples > 0)
