@@ -1,7 +1,7 @@
 #include <Adafruit_BMP280.h>
 #include <DHT.h>
 #include <HTTPClient.h>
-#include <LiquidCrystal.h>
+#include <LiquidCrystal_I2C.h> // Usa la biblioteca I2C para el LCD
 #include <ThingSpeak.h>
 #include <WiFi.h>
 #include <esp_sleep.h>
@@ -43,30 +43,25 @@ const char* ntpServer2 = "time.nist.gov";
 const long gmtOffset_sec = UTC_OFFSET;
 const int daylightOffset_sec = DST_OFFSET;
 
-// Configuracion Gateway
-unsigned long channelID = 2684607;                //ID 
-const char* WriteAPIKey = "WWLNAKEODAP70AF3";     //Write API Key
-bool connectToGateway = false; // Con cambiar esto a true se conecta a la
-                               // gateway
+// Configuración de conexión al Gateway (ThingSpeak)
+unsigned long channelID = 2684607;            // ID
+const char* WriteAPIKey = "WWLNAKEODAP70AF3"; // Write API Key
+bool connectToGateway = true;                 // Con cambiar esto a true se conecta a la gateway
 
 // URL del script de Apps Script para enviar datos a Google Sheets
 const char* scriptURL = "https://script.google.com/macros/s/"
                         "AKfycbx4X2QpN6QjZ2zSx5OdtCEPX5S8v6WXFEhs6Pvx7NPWWzzBnq"
                         "SnzMXLhmsGCfgRHCLLpg/exec";
 int samples = 24 * 60 / SAMPLE_TIME_MIN; // Número de muestras a publicar en la datasheet
-                                         // cada vez que se prende la ESP32 (1 dia de
-                                         // muestras)
-bool sendToGoogleSheets = false;         // Con cambiar esto a true ya se empiezan a
-                                         // mandar datos a la datasheet
+bool sendToGoogleSheets = false;         // Con cambiar esto a true ya se empiezan a mandar datos a la datasheet
 
-// Pines del LCD
-const int rs = 15, en = 2, d4 = 4, d5 = 16, d6 = 17, d7 = 5;
-LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
+// Configuración de LCD I2C (dirección I2C y tamaño)
+LiquidCrystal_I2C lcd(0x27, 16, 2); // Cambia la dirección I2C si es necesario
 #define LCD_COLS 16
 #define LCD_ROWS 2
 
 // Pines y configuración del DHT11
-#define DHTPIN  18 // Ajusta el pin al que está conectado el DHT11
+#define DHTPIN  13 // Ajusta el pin al que está conectado el DHT11
 #define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE);
 
@@ -101,8 +96,11 @@ void setup()
 {
     Serial.begin(BAUD_RATE);
 
-    // Inicializar LCD
-    lcd.begin(LCD_COLS, LCD_ROWS);
+    // Inicializar LCD I2C
+    lcd.init();                    // Inicializa el LCD en modo I2C
+    lcd.backlight();               // Activa la retroiluminación del LCD
+    lcd.begin(LCD_COLS, LCD_ROWS); // Establece el tamaño del LCD
+    imprimirCentrado("Inicializando...", LCD_LINE_0);
 
     // Inicializar DHT11
     dht.begin();
@@ -130,8 +128,6 @@ void setup()
         Serial.println("BMP280 inicializado.");
     }
 
-    imprimirCentrado("Inicializando...", LCD_LINE_0);
-
     // Conexión WiFi
     WiFi.begin(ssid, password);
     Serial.println("Conectando a WiFi...");
@@ -155,7 +151,8 @@ void setup()
         // Configuración de tiempo usando NTP
         configTime(gmtOffset_sec, daylightOffset_sec, ntpServer1, ntpServer2);
         obtenerHoraNTP();
-        if (connectToGateway) {
+        if (connectToGateway)
+        {
             WiFiClient client;
             ThingSpeak.begin(client);
         }
@@ -334,8 +331,8 @@ void actualizarDatosSensores()
     {
         // Leer presión y temperatura del BMP280
         temperatureBMP = bmp.readTemperature();
-        pressureBMP = bmp.readPressure() / 100.0; // Convertir de Pa a hPa
-        altitudeBMP = bmp.readAltitude(HPA_SEA_LEVEL);  // Calcular altitud con respecto al nivel del mar
+        pressureBMP = bmp.readPressure() / 100.0;      // Convertir de Pa a hPa
+        altitudeBMP = bmp.readAltitude(HPA_SEA_LEVEL); // Calcular altitud con respecto al nivel del mar
     }
     else
     {
@@ -363,12 +360,12 @@ void actualizarDatosSensores()
     if (connectToGateway && wifiConnected)
     {
         // Enviar datos a ThingSpeak
-        ThingSpeak.setField(1, temperatureBMP);
-        ThingSpeak.setField(2, humidityDHT);
-        ThingSpeak.setField(3, pressureBMP);
-        ThingSpeak.setField(4, altitudeBMP);
-        
-        //ThingSpeak.setField(5, temperatureProm);
+        ThingSpeak.setField(5, temperatureBMP);
+        ThingSpeak.setField(6, humidityDHT);
+        ThingSpeak.setField(7, pressureBMP);
+        ThingSpeak.setField(8, altitudeBMP);
+
+        // ThingSpeak.setField(5, temperatureProm);
         int x = ThingSpeak.writeFields(channelID, WriteAPIKey);
         if (x == 200)
         {
