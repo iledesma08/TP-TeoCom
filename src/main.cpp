@@ -21,7 +21,7 @@
 #define PRES_INIT_COL     4 // 16-8(largo de la cadena)=8/2 = 4
 
 // Definiciones de tiempo
-#define SAMPLE_TIME_MIN  1       // Tiempo de muestreo en minutos
+#define SAMPLE_TIME_MIN  0.5     // Tiempo de muestreo en minutos
 #define DISPLAY_TIME_SEC 10      // Tiempo de actualizacion del display en segundos
 #define MIN_TO_MS        60000   // Minutos a segundos
 #define SEC_TO_MS        1000    // Segundos a milisegundos
@@ -84,6 +84,7 @@ bool bmpConnected = true;
 float temperatureDHT, humidityDHT, temperatureBMP, pressureBMP, temperatureProm, altitudeBMP;
 
 // Prototipos de funciones
+void checkWifi();
 void imprimirCentrado(String texto, int linea);
 void obtenerHoraNTP();
 void mostrarFechaHora();
@@ -131,32 +132,7 @@ void setup()
     // Conexión WiFi
     WiFi.begin(ssid, password);
     Serial.println("Conectando a WiFi...");
-    int retry = 0;
-    while (retry < INTENTOS_WIFI && WiFi.status() != WL_CONNECTED)
-    {
-        delay(DELAY_AFTER_TRY);
-        Serial.print(".");
-        imprimirCentrado("WiFi try i=" + String(retry + 1), LCD_LINE_0);
-        retry++;
-        if (retry == INTENTOS_WIFI)
-        {
-            Serial.println("Error: No se pudo conectar a WiFi.");
-            imprimirCentrado("WiFi Error", LCD_LINE_0);
-            wifiConnected = false;
-        }
-    }
-    if (wifiConnected)
-    {
-        Serial.println("Conectado a WiFi!");
-        // Configuración de tiempo usando NTP
-        configTime(gmtOffset_sec, daylightOffset_sec, ntpServer1, ntpServer2);
-        obtenerHoraNTP();
-        if (connectToGateway)
-        {
-            WiFiClient client;
-            ThingSpeak.begin(client);
-        }
-    }
+    checkWifi();
     actualizarDatosSensores();
 }
 
@@ -169,7 +145,7 @@ void loop()
     {
         previousMillisSense = currentMillis;
         actualizarDatosSensores(); // Llama a la función para leer y mostrar los
-                                   // datos
+        // datos
     }
 
     // Rotar entre mostrar datos de sensores y la fecha/hora cada tiempo
@@ -197,6 +173,34 @@ void loop()
     delay(DELAY_WATCHDOG); // Para evitar que el Watchdog se active
 }
 
+// Función para verificar la conexión a WiFi
+void checkWifi()
+{
+    int retry = 0;
+    while (retry < INTENTOS_WIFI && WiFi.status() != WL_CONNECTED)
+    {
+        delay(DELAY_AFTER_TRY);
+        Serial.print(".");
+        int visual = retry + 1;
+        imprimirCentrado("WiFi try i=" + String(visual), LCD_LINE_0);
+        retry++;
+    }
+
+    if (retry == INTENTOS_WIFI)
+    {
+        Serial.println("Error: No se pudo conectar a WiFi.");
+        imprimirCentrado("WiFi Error", LCD_LINE_0);
+        wifiConnected = false;
+        return;
+    }
+
+    Serial.println("Conectado a WiFi!");
+    wifiConnected = true;
+    // Configuración de tiempo usando NTP
+    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer1, ntpServer2);
+    obtenerHoraNTP();
+}
+
 // Función para centrar texto en el LCD en una línea específica
 void imprimirCentrado(String texto, int linea)
 {
@@ -217,7 +221,8 @@ void obtenerHoraNTP()
     {
         delay(DELAY_AFTER_TRY);
         Serial.print(".");
-        imprimirCentrado("Hora try i=" + String(retry + 1), LCD_LINE_0);
+        int visual = retry + 1;
+        imprimirCentrado("Hora try i=" + String(visual), LCD_LINE_0);
         retry++;
     }
 
@@ -229,19 +234,6 @@ void obtenerHoraNTP()
     else
     {
         Serial.println("Hora obtenida correctamente!");
-        Serial.printf("Fecha y hora: %02d/%02d/%04d %02d:%02d:%02d\n",
-                      timeinfo.tm_mday,
-                      timeinfo.tm_mon + 1,
-                      timeinfo.tm_year + 1900,
-                      timeinfo.tm_hour,
-                      timeinfo.tm_min,
-                      timeinfo.tm_sec);
-        Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
-        lcd.clear();
-        lcd.setCursor(DATE_INIT_COL, LCD_LINE_0);
-        lcd.printf("%02d/%02d/%04d", timeinfo.tm_mday, timeinfo.tm_mon + 1, timeinfo.tm_year + 1900);
-        lcd.setCursor(TIME_INIT_COL, LCD_LINE_1);
-        lcd.printf("%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
     }
 }
 
@@ -292,6 +284,17 @@ void update_data_to_google_sheets()
 // Función para mostrar datos de sensores en el serial
 void mostrarDatosSensores_Serial()
 {
+    struct tm timeinfo;
+    if (getLocalTime(&timeinfo))
+    {
+        Serial.printf("Timestamp: %02d/%02d/%04d %02d:%02d:%02d\n",
+                      timeinfo.tm_mday,
+                      timeinfo.tm_mon + 1,
+                      timeinfo.tm_year + 1900,
+                      timeinfo.tm_hour,
+                      timeinfo.tm_min,
+                      timeinfo.tm_sec);
+    }
     Serial.print("Temperatura: ");
     Serial.print(temperatureBMP);
     Serial.print("C  Humedad: ");
@@ -357,23 +360,41 @@ void actualizarDatosSensores()
     // Mostrar en el LCD
     mostrarDatosSensores_LCD();
 
-    if (connectToGateway && wifiConnected)
+    if (connectToGateway)
     {
-        // Enviar datos a ThingSpeak
-        ThingSpeak.setField(5, temperatureBMP);
-        ThingSpeak.setField(6, humidityDHT);
-        ThingSpeak.setField(7, pressureBMP);
-        ThingSpeak.setField(8, altitudeBMP);
-
-        // ThingSpeak.setField(5, temperatureProm);
-        int x = ThingSpeak.writeFields(channelID, WriteAPIKey);
-        if (x == 200)
+        // Verificar que la conexión se mantuvo
+        if (WiFi.status() == WL_CONNECTED)
         {
-            Serial.println("Datos enviados a ThingSpeak correctamente.");
+            wifiConnected = true;
+            WiFiClient client;
+            ThingSpeak.begin(client); // Reinicia la conexión a ThingSpeak
         }
         else
         {
-            Serial.println("Error al enviar datos a ThingSpeak. Código de error: " + String(x));
+            Serial.println("Error: Conexión a WiFi perdida. No se puede comunicar con ThingSpeak.");
+            wifiConnected = false;
+            return;
+        }
+
+        if (wifiConnected)
+        {
+            // Enviar datos a ThingSpeak
+            // ThingSpeak.setField(5, temperatureProm);
+            ThingSpeak.setField(5, temperatureBMP);
+            ThingSpeak.setField(6, humidityDHT);
+            ThingSpeak.setField(7, pressureBMP);
+            ThingSpeak.setField(8, altitudeBMP);
+
+            int Gateway_Answer = ThingSpeak.writeFields(channelID, WriteAPIKey);
+
+            if (Gateway_Answer == 200)
+            {
+                Serial.println("Datos enviados a ThingSpeak correctamente.");
+            }
+            else
+            {
+                Serial.println("Error al enviar datos a ThingSpeak. Código de error: " + String(Gateway_Answer));
+            }
         }
     }
 
