@@ -21,7 +21,7 @@
 #define PRES_INIT_COL     4 // 16-8(largo de la cadena)=8/2 = 4
 
 // Definiciones de tiempo
-#define SAMPLE_TIME_MIN  0.5     // Tiempo de muestreo en minutos
+#define SAMPLE_TIME_MIN  1     // Tiempo de muestreo en minutos
 #define DISPLAY_TIME_SEC 10      // Tiempo de actualizacion del display en segundos
 #define MIN_TO_MS        60000   // Minutos a segundos
 #define SEC_TO_MS        1000    // Segundos a milisegundos
