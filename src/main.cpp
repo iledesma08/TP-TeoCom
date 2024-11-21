@@ -21,8 +21,8 @@
 #define PRES_INIT_COL     4 // 16-8(largo de la cadena)=8/2 = 4
 
 // Definiciones de tiempo
-#define SAMPLE_TIME_MIN  5       // 5 minutos
-#define DISPLAY_TIME_SEC 10      // Cambio cada 10 segundos
+#define SAMPLE_TIME_MIN  1       // Tiempo de muestreo en minutos
+#define DISPLAY_TIME_SEC 10      // Tiempo de actualizacion del display en segundos
 #define MIN_TO_MS        60000   // Minutos a segundos
 #define SEC_TO_MS        1000    // Segundos a milisegundos
 #define SEC_TO_US        1000000 // Segundos a microsegundos
@@ -35,10 +35,10 @@
 // Configuración de WiFi y NTP
 const char* ssid = "";
 const char* password = "";
-#define INTENTOS_WIFI 15
+#define INTENTOS_WIFI 10
 const char* ntpServer1 = "pool.ntp.org";
 const char* ntpServer2 = "time.nist.gov";
-#define INTENTOS_HORA   15
+#define INTENTOS_HORA   10
 #define DELAY_AFTER_TRY 1000
 const long gmtOffset_sec = UTC_OFFSET;
 const int daylightOffset_sec = DST_OFFSET;
@@ -56,9 +56,9 @@ int samples = 24 * 60 / SAMPLE_TIME_MIN; // Número de muestras a publicar en la
 bool sendToGoogleSheets = false;         // Con cambiar esto a true ya se empiezan a mandar datos a la datasheet
 
 // Configuración de LCD I2C (dirección I2C y tamaño)
-LiquidCrystal_I2C lcd(0x27, 16, 2); // Cambia la dirección I2C si es necesario
 #define LCD_COLS 16
 #define LCD_ROWS 2
+LiquidCrystal_I2C lcd(0x27, LCD_COLS, LCD_ROWS); // Cambia la dirección I2C si es necesario
 
 // Pines y configuración del DHT11
 #define DHTPIN  13 // Ajusta el pin al que está conectado el DHT11

@@ -1,3 +1,1 @@
-Desde cmd en Windows:
-
 curl -X POST -H "Content-Type: application/json" -d "{\"temperatureDHT\": 25.5, \"temperatureBMP\": 24.7, \"temperatureProm\": 25.1, \"humidityDHT\": 60.0, \"pressureBMP\": 1013.25}" "https://script.google.com/macros/s/AKfycbx4X2QpN6QjZ2zSx5OdtCEPX5S8v6WXFEhs6Pvx7NPWWzzBnqSnzMXLhmsGCfgRHCLLpg/exec"
